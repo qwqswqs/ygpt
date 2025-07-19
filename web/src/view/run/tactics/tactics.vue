@@ -1,0 +1,326 @@
+<template>
+  <div>
+    <div class="gva-table-box">
+      <div class="gva-btn-list">
+        <el-form
+            ref="searchForm"
+            :inline="true"
+            :model="searchInfo"
+            label-position="left"
+        >
+          <el-form-item>
+            <el-input
+                v-model="searchInfo.name"
+                placeholder="请输入区域名称"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button
+                type="primary"
+                @click="handleSearch"
+            >
+              查询
+            </el-button>
+            <el-button
+                type="primary"
+                @click="addPublicOpenDialog"
+            >
+              新增
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- 表格展示 -->
+      <el-table
+          :data="publicList"
+          row-key="ID"
+          :header-cell-style="{ 'background-color': 'rgba(242, 243, 245, 1)','color': 'rgba(29, 33, 41, 1)','text-align':'left'}"
+      >
+        <el-table-column label="名称">
+          <template #default="scope">
+            <span>{{ scope.row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="策略类别">
+          <template #default="scope">
+            <span>{{ publicType[scope.row.type] }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="策略关键字">
+          <template #default="scope">
+            <span>{{ scope.row.keyword }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="策略内容">
+          <template #default="scope">
+            <span>{{ scope.row.value }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="制定用户">
+          <template #default="scope">
+            <span>{{ GetUserName(scope.row.userId) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作">
+          <template #default="scope">
+            <el-button type="text" link @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button type="text" link @click="handleDelete(scope.row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="gva-pagination">
+        <el-pagination
+            :current-page="searchInfo.page"
+            :page-size="searchInfo.pageSize"
+            :page-sizes="[10, 30, 50, 100]"
+            :total="total"
+            layout="total,prev, pager, next,  sizes, jumper"
+            @current-change="handleCurrentChange"
+            @size-change="handleSizeChange"
+        />
+      </div>
+      <el-drawer
+          v-model="openDialog"
+          :close-on-click-modal="false"
+          :close-on-press-escape="false"
+          :show-close="false"
+          size="60%"
+      >
+        <template #header>
+          <div class="flex justify-between items-center">
+            <span class="text-lg">{{ IsCreated ? '新增' : '编辑' }}任务</span>
+            <div>
+              <el-button @click="closeDialog">取 消</el-button>
+              <el-button type="primary" @click="submitDialog">确 定</el-button>
+            </div>
+          </div>
+        </template>
+
+        <el-form
+            ref="dataInfo"
+            :model="dataInfo"
+            :rules="IsCreated?rules:''"
+            label-width="100px"
+        >
+          <el-form-item label="名称" prop="name">
+            <el-input v-model="dataInfo.name"/>
+          </el-form-item>
+          <el-form-item label="策略类别" prop="type">
+            <el-select v-model="dataInfo.type" placeholder="请选择策略类别">
+              <el-option
+                  v-for="(optionItem,optionIndex) in publicType"
+                  :key="optionIndex"
+                  :disabled="optionIndex == 0"
+                  :label="optionItem"
+                  :value="optionIndex"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="策略关键字" prop="keyword">
+            <el-input v-model="dataInfo.keyword"/>
+          </el-form-item>
+          <el-form-item label="策略内容" prop="value">
+            <el-input v-model="dataInfo.value"/>
+          </el-form-item>
+          <el-form-item label="说明" prop="description">
+            <el-input v-model="dataInfo.description"/>
+          </el-form-item>
+        </el-form>
+      </el-drawer>
+    </div>
+  </div>
+</template>
+<script>
+import {addPublic, deletePublic, getPublicList, updatePublic} from "@/api/yunguan/run/public";
+import {getUserList} from "@/api/system/user";
+
+
+export default {
+  data() {
+    return {
+      searchInfo: {
+        page: 1,
+        pageSize: 10,
+      },
+      total: 0,
+      IsCreated: true, // true新增 false编辑
+      openDialog: false,
+      dataInfo: {
+        id:0,
+        name: '',
+        type:'',
+        keyword:'',
+        value:'',
+        description: '',
+      },
+      rules: {
+        name: [
+          {required: true, message: '请输入策略名称', trigger: 'blur'}
+        ],
+        type: [
+          {required: true, message: '请选择策略类别', trigger: 'blur'}
+        ],
+        keyword: [
+          {required: true, message: '请输入策略关键字', trigger: 'blur'}
+        ],
+        value: [
+          {required: true, message: '请输入策略内容', trigger: 'blur'}
+        ],
+      },
+      publicList:[],
+      userList:[],
+      publicType:["请选择策略类别","资源调度","租户干预","快照"]
+    }
+  },
+  created() {
+    this.GetPublicList()
+    this.GetUserList()
+  },
+  methods: {
+    FormatDateTime(dateString) {
+      const date = new Date(dateString);
+      if (date.toISOString() === '0001-01-01T00:00:00.000Z') {
+        // 如果日期是不合理的，返回空字符串
+        return '';
+      }
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    },
+    handleDelete(val){
+      this.$confirm('此操作将永久删除该分区, 是否继续?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        deletePublic(val.ID).then(response => {
+          if (response.code == 0) {
+            this.$message({
+              message: '删除成功',
+              type: 'success'
+            })
+            this.GetPublicList(this.searchInfo)
+          } else {
+            this.$message({
+              message: '删除失败',
+              type: 'error'
+            });
+          }
+        })
+      }).catch(() => {
+        this.$message({
+          type: 'info',
+          message: '已取消删除'
+        });
+      });
+    },
+    handleEdit(val) {
+      this.dataInfo.id=val.ID
+      this.dataInfo.name=val.name
+      this.dataInfo.type=val.type
+      this.dataInfo.keyword=val.keyword
+      this.dataInfo.value=val.value
+      this.dataInfo.description=val.description
+      this.IsCreated = false
+      this.openDialog = true
+    },
+    handleSearch() {
+      this.GetPublicList()
+    },
+    handleCurrentChange(val) {
+      this.searchInfo.page = val
+    },
+    handleSizeChange(val) {
+      this.searchInfo.pageSize = val
+    },
+    addPublicOpenDialog() {
+      this.openDialog = true
+      this.IsCreated = true
+    },
+    closeDialog() {
+      this.openDialog = false
+    },
+    UpdatePublic() {
+      updatePublic(this.dataInfo).then(response => {
+        if (response.code == 0) {
+          this.$message({
+            message: '编辑成功',
+            type: 'success'
+          });
+          this.openDialog = false
+          this.GetPublicList()
+        } else {
+          this.$message({
+            message: '添加失败',
+            type: 'error'
+          });
+        }
+      })
+    },
+    // 新增分区
+    AddPublic() {
+      this.$refs.dataInfo.validate(valid => {
+        if (valid) {
+          addPublic(this.dataInfo).then(response => {
+            if (response.code == 0) {
+              this.$message({
+                message: '添加成功',
+                type: 'success'
+              });
+              this.openDialog = false
+              this.GetPublicList()
+            } else {
+              this.$message({
+                message: '添加失败',
+                type: 'error'
+              });
+            }
+          })
+        }
+      });
+    },
+    // 提交
+    submitDialog() {
+      if (this.IsCreated)this.AddPublic()
+      else this.UpdatePublic()
+    },
+    // 获取分区列表
+    GetPublicList() {
+      getPublicList(this.searchInfo).then(response => {
+        if (response.code == 0) {
+          this.publicList = response.data.list
+          this.total = response.data.total
+        } else {
+          this.$message({
+            message: '获取失败',
+            type: 'error'
+          });
+        }
+      })
+    },
+    //获取用户列表
+    GetUserList(){
+      getUserList(this.searchInfo).then(response => {
+        if (response.code == 0) {
+          this.userList = response.data.list
+        } else {
+          this.$message({
+            message: '获取失败',
+            type: 'error'
+          });
+        }
+      })
+    },
+    //获取用户名称
+    GetUserName(id){
+      const tenant = this.userList.find(t => t.ID === id);
+      return tenant ? tenant.nickName : null;
+    }
+  }
+}
+</script>

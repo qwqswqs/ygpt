@@ -1,0 +1,16 @@
+{{- $d := .resource_details -}}
+{{- if eq .resource_type "db_table_record" }}
+表{{ $d.table_name }}记录{{ $d.name }}被修改，完整性校验失败。期望校验和({{ $d.expected_checksum }}) != 计算校验和({{ $d.calculated_checksum }})。
+{{- end -}}
+{{- if eq .resource_type "cloudpods_component" }}
+{{ $d.details }}
+{{- end -}}
+{{- if eq .resource_type "snapshot" }}
+快照{{ $d.name }}的内存快照完整性校验失败
+{{- end -}}
+{{- if eq .resource_type "image" }}
+镜像{{ $d.name }}完整性校验失败
+{{- end -}}
+{{- if eq .resource_type "vm_integrity" }}
+主机{{ $d.name }}完整性校验失败
+{{- end -}}

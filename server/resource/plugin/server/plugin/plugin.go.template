@@ -1,0 +1,5 @@
+package plugin
+
+import "ygpt/server/plugin/{{ .Package }}/config"
+
+var Config config.Config
